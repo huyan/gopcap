@@ -16,7 +16,6 @@ import "C"
 import (
 	"errors"
 	"net"
-	"syscall"
 	"time"
 	"unsafe"
 )
