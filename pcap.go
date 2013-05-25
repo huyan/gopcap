@@ -16,6 +16,7 @@ import "C"
 import (
 	"errors"
 	"net"
+	"syscall"
 	"time"
 	"unsafe"
 )
@@ -178,6 +179,83 @@ func DatalinkValueToDescription(dlt int) string {
 	return ""
 }
 
+func Findalldevs() (ifs []Interface, err error) {
+	var buf *C.char
+	buf = (*C.char)(C.calloc(ERRBUF_SIZE, 1))
+	defer C.free(unsafe.Pointer(buf))
+	var alldevsp *C.pcap_if_t
 
+	if -1 == C.pcap_findalldevs((**C.pcap_if_t)(&alldevsp), buf) {
+		return nil, errors.New(C.GoString(buf))
+	}
+	defer C.pcap_freealldevs((*C.pcap_if_t)(alldevsp))
+	dev := alldevsp
+	var i uint32
+	for i = 0; dev != nil; dev = (*C.pcap_if_t)(dev.next) {
+		i++
+	}
+	ifs = make([]Interface, i)
+	dev = alldevsp
+	for j := uint32(0); dev != nil; dev = (*C.pcap_if_t)(dev.next) {
+		var iface Interface
+		iface.Name = C.GoString(dev.name)
+		iface.Description = C.GoString(dev.description)
+		//iface.Addresses = findalladdresses(dev.addresses)
+		// TODO: add more elements
+		ifs[j] = iface
+		j++
+	}
+	return
+}
 
+//func findalladdresses(addresses *_Ctype_struct_pcap_addr) (retval []IFAddress) {
+//	// TODO - make it support more than IPv4 and IPv6?
+//	retval = make([]IFAddress, 0, 1)
+//	for curaddr := addresses; curaddr != nil; curaddr = (*_Ctype_struct_pcap_addr)(curaddr.next) {
+//		var a IFAddress
+//		var err error
+//		if a.IP, err = sockaddr_to_IP((*syscall.RawSockaddr)(unsafe.Pointer(curaddr.addr))); err != nil {
+//			continue
+//		}
+//		if a.Netmask, err = sockaddr_to_IP((*syscall.RawSockaddr)(unsafe.Pointer(curaddr.addr))); err != nil {
+//			continue
+//		}
+//		retval = append(retval, a)
+//	}
+//	return
+//}
 
+//func sockaddr_to_IP(rsa *syscall.RawSockaddr) (IP []byte, err error) {
+//	switch rsa.Family {
+//	case syscall.AF_INET:
+//		pp := (*syscall.RawSockaddrInet4)(unsafe.Pointer(rsa))
+//		IP = make([]byte, 4)
+//		for i := 0; i < len(IP); i++ {
+//			IP[i] = pp.Addr[i]
+//		}
+//		return
+//	case syscall.AF_INET6:
+//		pp := (*syscall.RawSockaddrInet6)(unsafe.Pointer(rsa))
+//		IP = make([]byte, 16)
+//		for i := 0; i < len(IP); i++ {
+//			IP[i] = pp.Addr[i]
+//		}
+//		return
+//	}
+//	err = errors.New("Unsupported address type")
+//	return
+//}
+
+func (p *Pcap) Inject(data []byte) (err error) {
+	buf := (*C.char)(C.malloc((C.size_t)(len(data))))
+
+	for i := 0; i < len(data); i++ {
+		*(*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(buf)) + uintptr(i))) = data[i]
+	}
+
+	if -1 == C.pcap_inject(p.cptr, unsafe.Pointer(buf), (C.size_t)(len(data))) {
+		err = p.Geterror()
+	}
+	C.free(unsafe.Pointer(buf))
+	return
+}
