@@ -111,6 +111,16 @@ func (p *Pcap) NextEx() (pkt *Packet, result int32) {
 	return
 }
 
+func (p *Pcap) Inject(data []byte) (err error) {
+	buf := C.CString(string(data))
+
+	if -1 == C.pcap_sendpacket(p.cptr, (*C.u_char)(unsafe.Pointer(buf)), (C.int)(len(data))) {
+		err = p.Geterror()
+	}
+	C.free(unsafe.Pointer(buf))
+	return
+}
+
 func (p *Pcap) Close() {
 	C.pcap_close(p.cptr)
 }
